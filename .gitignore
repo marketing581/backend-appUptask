@@ -9,3 +9,8 @@ node_modules/
 # el build del servidor sea igual al local.
 .DS_Store
 dist
+
+# Importaciones con datos reales del negocio (RUC, nombres de personas).
+# Se quedan en local: publicarlas dejaría esa información en el historial
+# del repositorio para siempre.
+src/migrations/seed-sofianne-notes.ts
