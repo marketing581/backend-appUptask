@@ -32,10 +32,27 @@ export function taskBelongsToProject(req: Request, res: Response, next: NextFunc
     next()
 }
 
-export function hasAuthorization(req: Request, res: Response, next: NextFunction ) {
-    if( req.user.id.toString() !== req.project.manager.toString() ) {
-        const error = new Error('Acción no válida')
-        return res.status(400).json({error: error.message}) 
+const sameId = (a: unknown, b: unknown) => !!a && !!b && a.toString() === b.toString()
+
+/** Editar el proyecto en sí (nombre, cliente, descripción) o eliminarlo:
+ *  solo su manager o la encargada del equipo. */
+export function isProjectManager(req: Request, res: Response, next: NextFunction ) {
+    if( !sameId(req.user._id, req.project.manager) && req.user.role !== 'manager' ) {
+        const error = new Error('Solo la responsable del proyecto puede hacer este cambio')
+        return res.status(403).json({error: error.message})
+    }
+    next()
+}
+
+/** Trabajar dentro del proyecto (crear, editar y mover tareas): su manager,
+ *  cualquier integrante de su equipo, o la encargada. */
+export function canWorkOnProject(req: Request, res: Response, next: NextFunction ) {
+    const isManager = sameId(req.user._id, req.project.manager)
+    const isTeamMember = req.project.team?.some(memberId => sameId(memberId, req.user._id))
+
+    if( !isManager && !isTeamMember && req.user.role !== 'manager' ) {
+        const error = new Error('No perteneces a este proyecto')
+        return res.status(403).json({error: error.message})
     }
     next()
 }

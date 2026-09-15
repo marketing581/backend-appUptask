@@ -4,8 +4,12 @@ import cors from 'cors'
 import morgan from 'morgan'
 import { corsConfig } from './config/cors'
 import { connectDB } from './config/db'
+import './models'
 import authRoutes from './routes/authRoutes'
 import projectRoutes from './routes/projectRoutes'
+import taskRoutes from './routes/taskRoutes'
+import scheduleRoutes from './routes/scheduleRoutes'
+import brandRoutes from './routes/brandRoutes'
 
 dotenv.config()
 connectDB()
@@ -22,5 +26,8 @@ app.use(express.json())
 // Routes
 app.use('/api/auth', authRoutes)
 app.use('/api/projects', projectRoutes)
+app.use('/api/tasks', taskRoutes)
+app.use('/api/schedule', scheduleRoutes)
+app.use('/api/brands', brandRoutes)
 
 export default app
