@@ -4,6 +4,8 @@
 !.env.example
 
 node_modules/
-package-lock.json
+
+# package-lock.json SÍ va al repositorio: fija las versiones exactas para que
+# el build del servidor sea igual al local.
 .DS_Store
 dist
