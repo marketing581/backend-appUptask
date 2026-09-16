@@ -29,6 +29,12 @@ router.put('/blocks/:blockId',
     ScheduleController.updateBlock
 )
 
+router.post('/blocks/:blockId/leave',
+    param('blockId').isMongoId().withMessage('ID no válido'),
+    handleInputErrors,
+    ScheduleController.leaveBlock
+)
+
 router.delete('/blocks/:blockId',
     param('blockId').isMongoId().withMessage('ID no válido'),
     handleInputErrors,

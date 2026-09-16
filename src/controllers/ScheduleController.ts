@@ -21,14 +21,25 @@ import {
 } from '../utils/datetime'
 import { isDoneForPeriod, isRecurring, occurrencesPerWeek } from '../utils/recurrence'
 
-const BLOCK_POPULATE = {
-    path: 'task',
-    select: '_id name status priority project brand dueDate estimatedMinutes onHold review isPrivate assignee createdBy collaborators',
-    populate: [
-        { path: 'project', select: '_id projectName' },
-        { path: 'brand', select: '_id name color' }
-    ]
-}
+const BLOCK_POPULATE = [
+    {
+        path: 'task',
+        select: '_id name status priority project brand dueDate estimatedMinutes onHold review isPrivate assignee createdBy collaborators',
+        populate: [
+            { path: 'project', select: '_id projectName' },
+            { path: 'brand', select: '_id name color' }
+        ]
+    },
+    // El calendario ajeno muestra bloques compartidos: hay que poder decir de
+    // quién es cada uno y a quién más se etiquetó.
+    { path: 'user', select: '_id name email' },
+    { path: 'guests', select: '_id name email' }
+]
+
+/** Un bloque está en el calendario de alguien si es suyo o si se la etiquetó. */
+const inCalendarOf = (userId: Types.ObjectId) => ({
+    $or: [{ user: userId }, { guests: userId }]
+})
 
 const MAX_BLOCK_MINUTES = 12 * 60
 
@@ -105,13 +116,57 @@ async function scheduledDaysByTask(
 
 async function findConflicts(userId: Types.ObjectId, start: Date, end: Date, excludeId?: string) {
     const filter: Record<string, unknown> = {
-        user: userId,
+        ...inCalendarOf(userId),
         start: { $lt: end },
         end: { $gt: start }
     }
     if (excludeId) filter._id = { $ne: new Types.ObjectId(excludeId) }
 
     return TimeBlock.find(filter).populate(BLOCK_POPULATE)
+}
+
+/** Cruces en la agenda de cada persona etiquetada.
+ *
+ *  Etiquetar a alguien le ocupa una hora, así que hay que decir si ya tenía
+ *  algo ahí. No se impide —a veces se quiere solapar a propósito—, pero se
+ *  avisa antes de guardar, no después. */
+async function findGuestConflicts(
+    guests: Types.ObjectId[], start: Date, end: Date, excludeId?: string
+) {
+    const rows = await Promise.all(guests.map(async guestId => {
+        const blocks = await findConflicts(guestId, start, end, excludeId)
+        const user = await User.findById(guestId).select('_id name')
+        return { user: { _id: guestId, name: user?.name ?? '' }, count: blocks.length }
+    }))
+    return rows.filter(row => row.count > 0)
+}
+
+/** Valida y normaliza a quién se etiqueta.
+ *
+ *  Un pendiente reservado no se puede compartir: sería contradictorio invitar
+ *  a alguien a algo marcado como «Solo tú lo ves». Y nadie puede figurar como
+ *  invitada en su propio calendario. */
+async function resolveGuests(
+    raw: unknown, ownerId: Types.ObjectId, task: { isPrivate?: boolean }
+): Promise<{ error: string } | { guests: Types.ObjectId[] }> {
+    if (!Array.isArray(raw)) return { guests: [] }
+
+    const ids = [...new Set(raw.map(String))]
+        .filter(id => Types.ObjectId.isValid(id))
+        .filter(id => id !== ownerId.toString())
+
+    if (ids.length === 0) return { guests: [] }
+
+    if (task.isPrivate) {
+        return { error: 'Un pendiente reservado no se puede compartir. Quítale «Solo tú lo ves» primero.' }
+    }
+
+    const users = await User.find({ _id: { $in: ids }, confirmed: true }).select('_id')
+    if (users.length !== ids.length) {
+        return { error: 'Alguna de las personas etiquetadas no existe o no tiene la cuenta activa' }
+    }
+
+    return { guests: users.map(user => user._id) }
 }
 
 /** Los bloques de tareas reservadas siguen ocupando hueco en el calendario
@@ -177,7 +232,7 @@ export class ScheduleController {
             const weekEnd = addDays(weekStart, 7)
 
             const blocks = await TimeBlock.find({
-                user: owner._id,
+                ...inCalendarOf(owner._id),
                 start: { $gte: weekStart, $lt: weekEnd }
             }).populate(BLOCK_POPULATE).sort({ start: 1 })
 
@@ -213,7 +268,7 @@ export class ScheduleController {
 
             const [blocks, dueToday, overdue] = await Promise.all([
                 TimeBlock.find({
-                    user: owner._id,
+                    ...inCalendarOf(owner._id),
                     start: { $gte: dayStart, $lt: dayEnd }
                 }).populate(BLOCK_POPULATE).sort({ start: 1 }),
 
@@ -344,22 +399,29 @@ export class ScheduleController {
                 return res.status(403).json({ error: 'No tienes acceso a esta tarea' })
             }
 
+            const invited = await resolveGuests(req.body.guests, owner._id, task)
+            if ('error' in invited) return res.status(400).json({ error: invited.error })
+
             const block = new TimeBlock({
                 task: task._id,
                 user: owner._id,
                 start: range.start,
                 end: range.end,
                 note: req.body.note ?? '',
-                createdBy: req.user._id
+                createdBy: req.user._id,
+                guests: invited.guests
             })
 
             // Los cruces se avisan, no se reprograman en silencio.
-            const conflicts = await findConflicts(owner._id, range.start, range.end)
+            const [conflicts, guestConflicts] = await Promise.all([
+                findConflicts(owner._id, range.start, range.end),
+                findGuestConflicts(invited.guests, range.start, range.end)
+            ])
 
             await block.save()
             await block.populate(BLOCK_POPULATE)
 
-            res.status(201).json({ block, conflicts })
+            res.status(201).json({ block, conflicts, guestConflicts })
         } catch (error) {
             res.status(500).json({ error: 'Hubo un error' })
         }
@@ -384,12 +446,47 @@ export class ScheduleController {
             block.end = range.end
             if ('note' in req.body) block.note = String(req.body.note ?? '')
 
-            const conflicts = await findConflicts(block.user, range.start, range.end, block.id)
+            if ('guests' in req.body) {
+                const task = await Task.findById(block.task).select('isPrivate')
+                const invited = await resolveGuests(req.body.guests, block.user, task ?? {})
+                if ('error' in invited) return res.status(400).json({ error: invited.error })
+                block.guests = invited.guests
+            }
+
+            const [conflicts, guestConflicts] = await Promise.all([
+                findConflicts(block.user, range.start, range.end, block.id),
+                findGuestConflicts(block.guests, range.start, range.end, block.id)
+            ])
 
             await block.save()
             await block.populate(BLOCK_POPULATE)
 
-            res.json({ block, conflicts })
+            res.json({ block, conflicts, guestConflicts })
+        } catch (error) {
+            res.status(500).json({ error: 'Hubo un error' })
+        }
+    }
+
+    /** Quitarse de un bloque compartido.
+     *
+     *  Una invitada no puede mover ni borrar el bloque —no es su calendario—
+     *  pero sí dejar de aparecer en él. Que solo pueda quitarlo quien lo creó
+     *  convertiría cada etiqueta en algo de lo que no se puede salir. */
+    static leaveBlock = async (req: Request, res: Response) => {
+        try {
+            const block = await TimeBlock.findById(req.params.blockId)
+            if (!block) return res.status(404).json({ error: 'Bloque no encontrado' })
+
+            const isGuest = block.guests.some(guest => guest.toString() === req.user.id.toString())
+            if (!isGuest) {
+                return res.status(400).json({ error: 'No estás etiquetada en este bloque' })
+            }
+
+            block.guests = block.guests.filter(
+                guest => guest.toString() !== req.user.id.toString()
+            )
+            await block.save()
+            res.json({ message: 'Te quitaste del bloque' })
         } catch (error) {
             res.status(500).json({ error: 'Hubo un error' })
         }

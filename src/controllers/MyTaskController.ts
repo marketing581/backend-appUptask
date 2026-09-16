@@ -195,6 +195,24 @@ export class MyTaskController {
                         error: 'Solo la encargada puede reservar, y solo sus propias tareas'
                     })
                 }
+
+                // Reservar algo que ya está compartido en el calendario de otra
+                // persona dejaría el bloque en su agenda convertido en
+                // «Reservado»: sabría que hay algo y no qué. Mejor decirlo y
+                // que se decida a mano.
+                if (req.body.isPrivate) {
+                    const shared = await TimeBlock.exists({
+                        task: task._id,
+                        guests: { $exists: true, $ne: [] }
+                    })
+                    if (shared) {
+                        return res.status(400).json({
+                            error: 'Este pendiente está compartido en el calendario. ' +
+                                'Quita a las personas etiquetadas antes de reservarlo.'
+                        })
+                    }
+                }
+
                 task.isPrivate = !!req.body.isPrivate
             }
 
