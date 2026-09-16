@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express'
 import { Types } from 'mongoose'
-import Task, { taskStatus } from '../models/Task'
+import Task, { taskFrequency, taskStatus } from '../models/Task'
 import { isDoneForPeriod } from '../utils/recurrence'
 import { DEFAULT_TIMEZONE } from '../utils/datetime'
 import Project from '../models/Project'
@@ -26,30 +26,72 @@ const TASK_POPULATE = [
 
 export class MyTaskController {
 
-    /** Tareas visibles para la usuaria: las suyas y, si es encargada,
-     *  también las del resto del equipo cuando lo pide explícitamente. */
+    /** Tareas visibles para la usuaria: las suyas y las del equipo, salvo las
+     *  reservadas.
+     *
+     *  `kind` separa las tres naturalezas del trabajo, que se gestionan de
+     *  forma distinta: lo que se repite, lo que se hace una vez y lo que forma
+     *  parte de un proyecto con seguimiento. */
     static getTasks = async (req: Request, res: Response) => {
         try {
-            const { assignee, status, includeDone } = req.query
+            const { assignee, status, includeDone, kind, limit, q } = req.query
 
             const filter: Record<string, unknown> = {}
 
             if (assignee) filter.assignee = new Types.ObjectId(assignee.toString())
 
+            if (kind === 'maintenance') {
+                filter.project = null
+                filter.frequency = { $nin: [taskFrequency.NONE, null] }
+            } else if (kind === 'oneOff') {
+                filter.project = null
+                filter.frequency = { $in: [taskFrequency.NONE, null] }
+            } else if (kind === 'project') {
+                filter.project = { $ne: null }
+            }
+
             if (status) filter.status = status
             else if (includeDone !== 'true') filter.status = { $ne: taskStatus.DONE }
 
-            const tasks = await Task.find({ ...filter, ...visibleTaskFilter(req.user) })
+            // La búsqueda va contra la colección entera, no contra la página
+            // que se está mostrando: buscar en el histórico y no encontrar algo
+            // que sí está sería peor que no tener buscador.
+            const term = typeof q === 'string' ? q.trim() : ''
+            if (term) {
+                const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                filter.name = { $regex: escaped, $options: 'i' }
+            }
+
+            // Lo terminado se ordena por cuándo se cerró; lo abierto, por urgencia.
+            const sort: Record<string, 1 | -1> = status === taskStatus.DONE
+                ? { updatedAt: -1 }
+                : { dueDate: 1, createdAt: -1 }
+
+            const query = Task.find({ ...filter, ...visibleTaskFilter(req.user) })
                 .populate(TASK_POPULATE)
-                .sort({ dueDate: 1, createdAt: -1 })
+                .sort(sort)
+
+            // El historial de pendientes cerrados puede ser de cientos: se pagina
+            // para no traer de golpe lo que la pantalla no va a mostrar.
+            const max = Number(limit)
+            if (Number.isFinite(max) && max > 0) query.limit(Math.min(max, 200))
+
+            const tasks = await query
 
             // `doneForPeriod` dice si la ocurrencia de hoy (o de esta semana)
             // ya está hecha, sin que la tarea deje de existir.
             const timezone = req.user.timezone || DEFAULT_TIMEZONE
-            res.json(tasks.map(task => ({
+            const payload = tasks.map(task => ({
                 ...task.toObject(),
                 doneForPeriod: isDoneForPeriod(task, timezone)
-            })))
+            }))
+
+            if (Number.isFinite(max) && max > 0) {
+                const total = await Task.countDocuments({ ...filter, ...visibleTaskFilter(req.user) })
+                res.setHeader('X-Total-Count', String(total))
+            }
+
+            res.json(payload)
         } catch (error) {
             res.status(500).json({ error: 'Hubo un error' })
         }

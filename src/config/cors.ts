@@ -1,6 +1,10 @@
 import { CorsOptions } from 'cors'
 
 export const corsConfig: CorsOptions = {
+    /** Sin esto el navegador oculta la cabecera al JavaScript de la página, y
+     *  en producción el frontend y la API están en dominios distintos: el
+     *  listado paginado no sabría cuántos elementos hay en total. */
+    exposedHeaders: ['X-Total-Count'],
     origin: function(origin, callback) {
         const whitelist = [process.env.FRONTEND_URL]
 
