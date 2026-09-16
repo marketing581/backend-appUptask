@@ -3,29 +3,33 @@ import Project from '../models/Project'
 import Task from '../models/Task'
 
 export class ProjectController {
+    /** Crear un proyecto no pide más que un nombre: cliente, descripción y
+     *  área se completan después, cuando hagan falta, igual que un pendiente
+     *  rápido. Quien lo crea queda como responsable, pero el proyecto es del
+     *  equipo desde el primer momento: las tres lo ven y pueden trabajar en
+     *  él. */
     static createProject = async (req: Request, res: Response) => {
         const project = new Project(req.body)
-
-        // Asigna un manager
         project.manager = req.user.id
         try {
-            await project.save() 
-            res.send('Proyecto Creando Correctamente')
+            await project.save()
+            res.status(201).json(project)
         } catch (error) {
-            console.log(error)
+            res.status(500).json({ error: 'Hubo un error' })
         }
     }
 
     /** Lista con el avance de cada proyecto, para no tener que abrirlos uno a
-     *  uno solo para saber cómo van. */
+     *  uno solo para saber cómo van.
+     *
+     *  El equipo es de tres personas que se ven todo el trabajo entre sí: un
+     *  proyecto que crea Sofianne lo ve también Elery, aunque no figure como
+     *  su responsable ni esté en el equipo del proyecto. No hay nada privado
+     *  aquí —a diferencia de las tareas puntuales, que sí pueden reservarse—,
+     *  así que no hace falta filtrar por quién lo creó. */
     static getAllProjects = async (req: Request, res: Response) => {
         try {
-            const projects = await Project.find({
-                $or: [
-                    {manager: {$in: req.user.id}},
-                    {team: {$in: req.user.id}}
-                ]
-            }).lean()
+            const projects = await Project.find({}).lean()
 
             const rows = await Task.aggregate([
                 { $match: { project: { $in: projects.map(project => project._id) } } },
@@ -57,51 +61,49 @@ export class ProjectController {
                     ?? { pending: 0, inProgress: 0, toValidate: 0, done: 0, total: 0 }
             })))
         } catch (error) {
-            console.log(error)
             res.status(500).json({ error: 'Hubo un error' })
         }
     }
 
+    /** Cualquier persona del equipo puede abrir cualquier proyecto: son tres
+     *  cuentas que comparten el mismo trabajo, así que no hay un "no te
+     *  pertenece" que aplicar aquí. */
     static getProjectById = async (req: Request, res: Response) => {
-        const { id } = req.params
+        const { id } = req.params
         try {
             const project = await Project.findById(id).populate({
                 path: 'tasks',
                 populate: { path: 'assignee', select: '_id name email' }
             })
             if(!project) {
-                const error = new Error('Proyecto no encontrado')
-                return res.status(404).json({error: error.message})
-            }
-            if(project.manager.toString() !== req.user.id.toString() && !project.team.includes(req.user.id)) {
-                const error = new Error('Acción no válida')
-                return res.status(404).json({error: error.message})
+                return res.status(404).json({ error: 'Proyecto no encontrado' })
             }
             res.json(project)
         } catch (error) {
-            console.log(error)
+            res.status(500).json({ error: 'Hubo un error' })
         }
     }
 
     static updateProject = async (req: Request, res: Response) => {
         try {            
-            req.project.clientName = req.body.clientName
+            req.project.clientName = req.body.clientName ?? ''
             req.project.projectName = req.body.projectName
-            req.project.description = req.body.description
+            req.project.description = req.body.description ?? ''
+            if ('brand' in req.body) req.project.brand = req.body.brand || null
 
             await req.project.save()
-            res.send('Proyecto Actualizado')
+            res.json(req.project)
         } catch (error) {
-            console.log(error)
+            res.status(500).json({ error: 'Hubo un error' })
         }
     }
 
     static deleteProject = async (req: Request, res: Response) => {
         try {
             await req.project.deleteOne()
-            res.send('Proyecto Eliminado')
+            res.json({ message: 'Proyecto eliminado' })
         } catch (error) {
-            console.log(error)
+            res.status(500).json({ error: 'Hubo un error' })
         }
     }
 }

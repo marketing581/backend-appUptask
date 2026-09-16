@@ -6,6 +6,8 @@ import TimeBlock from './TimeBlock'
 
 export interface IProject extends Document {
     projectName: string
+    /** Opcionales: la mayoría de proyectos internos no tienen un cliente
+     *  externo ni necesitan una descripción para empezar a trabajar. */
     clientName: string
     description: string
     brand: Types.ObjectId | null
@@ -22,13 +24,13 @@ const ProjectSchema: Schema = new Schema({
     },
     clientName: {
         type: String,
-        required: true,
-        trim: true
+        trim: true,
+        default: ''
     },
     description: {
         type: String,
-        required: true,
-        trim: true
+        trim: true,
+        default: ''
     },
     // Los proyectos existentes quedan sin marca: la reclasificación es manual.
     brand: {

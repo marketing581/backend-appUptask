@@ -1,18 +1,38 @@
 import type { Request, Response } from 'express'
 import User from '../models/User'
 import { isValidTimezone } from '../utils/datetime'
+import { canEditCalendarOf } from '../middleware/authorization'
 
 export class PreferencesController {
 
-    /** Zona horaria y franja visible del calendario. La franja por defecto es
-     *  de 8 a 18, pero se puede ampliar y mostrar fines de semana cuando un
-     *  evento lo requiera. */
+    /** Zona horaria y horario de trabajo. El horario por defecto es de 8 a
+     *  18, pero se puede ampliar y mostrar fines de semana cuando un evento
+     *  lo requiera.
+     *
+     *  Cada quien edita el suyo; la encargada además puede editar el de
+     *  cualquier persona del equipo (`userId` en el cuerpo), porque el
+     *  horario de trabajo de Sofi o de Nicole no es una preferencia personal
+     *  de pantalla: es un dato real que la propia encargada necesita poder
+     *  corregir —por ejemplo, si alguien pasa a trabajar medio tiempo. */
     static updatePreferences = async (req: Request, res: Response) => {
         try {
-            const user = await User.findById(req.user.id)
+            const targetId = (req.body.userId ?? req.user.id).toString()
+
+            if (!canEditCalendarOf(req.user, targetId)) {
+                return res.status(403).json({
+                    error: 'Solo la encargada puede cambiar el horario de otra persona'
+                })
+            }
+
+            const user = targetId === req.user.id.toString()
+                ? req.user
+                : await User.findById(targetId)
+
             if (!user) return res.status(404).json({ error: 'Usuaria no encontrada' })
 
-            if ('timezone' in req.body) {
+            // La zona horaria sí es personal: no viaja con `userId`, cada
+            // quien ajusta la suya.
+            if (targetId === req.user.id.toString() && 'timezone' in req.body) {
                 const timezone = String(req.body.timezone)
                 if (!isValidTimezone(timezone)) {
                     return res.status(400).json({ error: 'Zona horaria no válida' })
@@ -44,6 +64,7 @@ export class PreferencesController {
 
             await user.save()
             res.json({
+                _id: user._id,
                 timezone: user.timezone,
                 schedulePrefs: user.schedulePrefs
             })

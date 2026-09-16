@@ -44,15 +44,16 @@ export function isProjectManager(req: Request, res: Response, next: NextFunction
     next()
 }
 
-/** Trabajar dentro del proyecto (crear, editar y mover tareas): su manager,
- *  cualquier integrante de su equipo, o la encargada. */
+/** Trabajar dentro del proyecto: crear, editar y mover tareas.
+ *
+ *  El equipo es de tres personas que comparten todo el trabajo, así que
+ *  cualquier cuenta confirmada puede trabajar en cualquier proyecto — estar
+ *  o no en `project.team` no lo condiciona. Ese campo queda para marcar quién
+ *  está más de cerca en un proyecto puntual, no como permiso de acceso. */
 export function canWorkOnProject(req: Request, res: Response, next: NextFunction ) {
-    const isManager = sameId(req.user._id, req.project.manager)
-    const isTeamMember = req.project.team?.some(memberId => sameId(memberId, req.user._id))
-
-    if( !isManager && !isTeamMember && req.user.role !== 'manager' ) {
-        const error = new Error('No perteneces a este proyecto')
-        return res.status(403).json({error: error.message})
+    if (!req.user) {
+        const error = new Error('No autenticada')
+        return res.status(401).json({error: error.message})
     }
     next()
 }

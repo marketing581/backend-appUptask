@@ -13,13 +13,13 @@ const router = Router()
 
 router.use(authenticate)
 
+// Solo el nombre es obligatorio: cliente, descripción y área se completan
+// después, si hacen falta.
 router.post('/',
     body('projectName')
-        .notEmpty().withMessage('El Nombre del Proyecto es Obligatorio'),
-    body('clientName')
-        .notEmpty().withMessage('El Nombre del Cliente es Obligatorio'),
-    body('description')
-        .notEmpty().withMessage('La Descripción del Proyecto es Obligatoria'),
+        .notEmpty().withMessage('El nombre del proyecto es obligatorio'),
+    body('clientName').optional(),
+    body('description').optional(),
     handleInputErrors,
     ProjectController.createProject
 )
@@ -39,11 +39,9 @@ router.param('projectId', projectExists)
 router.put('/:projectId',
     param('projectId').isMongoId().withMessage('ID no válido'),
     body('projectName')
-        .notEmpty().withMessage('El Nombre del Proyecto es Obligatorio'),
-    body('clientName')
-        .notEmpty().withMessage('El Nombre del Cliente es Obligatorio'),
-    body('description')
-        .notEmpty().withMessage('La Descripción del Proyecto es Obligatoria'),
+        .notEmpty().withMessage('El nombre del proyecto es obligatorio'),
+    body('clientName').optional(),
+    body('description').optional(),
     handleInputErrors,
     isProjectManager,
     ProjectController.updateProject

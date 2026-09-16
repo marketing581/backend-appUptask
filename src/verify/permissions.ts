@@ -143,37 +143,35 @@ async function run() {
             end: new Date(Date.UTC(2026, 9, 5, 17, 0)).toISOString()
         })).status)
 
-    section('Sí pueden trabajar en los proyectos a los que pertenecen')
+    section('Los proyectos son del equipo, no de quien los crea')
     const project = await api(nicole, 'POST', '/projects', {
         projectName: 'Proyecto de permisos',
         clientName: 'Interno',
         description: 'Verificación automática'
     })
-    check('Nicole puede crear un proyecto', 201, project.status === 200 ? 201 : project.status)
-    const projects = await api(nicole, 'GET', '/projects')
-    const projectId = projects.data.find((p: any) => p.projectName === 'Proyecto de permisos')._id
+    check('Nicole puede crear un proyecto', 201, project.status)
+    const projectId = project.data._id
     cleanup.push({ token: nicole, path: `/projects/${projectId}` })
+
+    // El equipo es de tres personas que comparten todo el trabajo: un
+    // proyecto se ve y se trabaja entre las tres, esté o no su nombre en
+    // `team`. Solo lo que cambia el proyecto en sí queda para su responsable.
+    check('Sofianne lo ve en su lista aunque no lo creó ni está en su equipo', true,
+        (await api(sofianne, 'GET', '/projects')).data.some((row: any) => row._id === projectId))
+    check('y puede abrirlo', 200,
+        (await api(sofianne, 'GET', `/projects/${projectId}`)).status)
 
     check('la responsable crea tareas en él', 200,
         (await api(nicole, 'POST', `/projects/${projectId}/tasks`, { name: 'Tarea del proyecto' })).status)
-
-    check('Sofianne, fuera del equipo, no puede crear tareas ahí', 403,
-        (await api(sofianne, 'POST', `/projects/${projectId}/tasks`, { name: 'Intrusa' })).status)
-    check('ni editar el proyecto', 403,
-        (await api(sofianne, 'PUT', `/projects/${projectId}`, {
-            projectName: 'Robado', clientName: 'X', description: 'Y'
-        })).status)
-    check('ni añadir colaboradoras', 403,
-        (await api(sofianne, 'POST', `/projects/${projectId}/team`, { id: sofianneMe._id })).status)
-
-    // La responsable la suma al equipo: a partir de ahí sí puede trabajar.
-    await api(nicole, 'POST', `/projects/${projectId}/team`, { id: sofianneMe._id })
-    check('una vez en el equipo, Sofianne sí crea tareas', 200,
+    check('Sofianne también, sin estar en el equipo del proyecto', 200,
         (await api(sofianne, 'POST', `/projects/${projectId}/tasks`, { name: 'Tarea compartida' })).status)
-    check('pero sigue sin poder editar el proyecto', 403,
+
+    check('pero Sofianne no puede editar el proyecto en sí', 403,
         (await api(sofianne, 'PUT', `/projects/${projectId}`, {
             projectName: 'Robado', clientName: 'X', description: 'Y'
         })).status)
+    check('ni añadir colaboradoras al registro del proyecto', 403,
+        (await api(sofianne, 'POST', `/projects/${projectId}/team`, { id: sofianneMe._id })).status)
     check('ni eliminarlo', 403,
         (await api(sofianne, 'DELETE', `/projects/${projectId}`)).status)
 
@@ -204,6 +202,33 @@ async function run() {
 
     const bossTasks = await api(boss, 'GET', `/tasks?assignee=${nicoleMe._id}`)
     check('puede revisar las tareas de Nicole', 200, bossTasks.status)
+
+    section('El horario de trabajo: cada quien el suyo, la encargada el de todas')
+    // Se deja tal como estaba al terminar: esta verificación no debe alterar
+    // un dato real del equipo.
+    const originalPrefs = nicoleMe.schedulePrefs
+    // Un valor que con certeza es distinto del real, para que la ida y
+    // vuelta se note y no quede enmascarada por una coincidencia.
+    const testStart = originalPrefs.dayStartHour === 6 ? 5 : 6
+
+    check('Sofianne no puede cambiar el horario de Nicole', 403,
+        (await api(sofianne, 'PUT', '/schedule/preferences', {
+            userId: nicoleMe._id,
+            schedulePrefs: { dayStartHour: testStart, dayEndHour: 21 }
+        })).status)
+
+    const changed = await api(boss, 'PUT', '/schedule/preferences', {
+        userId: nicoleMe._id,
+        schedulePrefs: { dayStartHour: testStart, dayEndHour: 21 }
+    })
+    check('la encargada sí puede cambiarlo', 200, changed.status)
+    check('y el cambio se aplica al horario real de Nicole', testStart, changed.data.schedulePrefs.dayStartHour)
+
+    const restored = await api(boss, 'PUT', '/schedule/preferences', {
+        userId: nicoleMe._id,
+        schedulePrefs: originalPrefs
+    })
+    check('se restaura tal como estaba', originalPrefs.dayStartHour, restored.data.schedulePrefs.dayStartHour)
 
     section('Lo que la encargada reserva no lo ve nadie más')
     const bossMe = (await api(boss, 'GET', '/auth/user')).data
