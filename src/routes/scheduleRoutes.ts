@@ -11,6 +11,7 @@ router.use(authenticate)
 
 router.get('/week', ScheduleController.getWeek)
 router.get('/day', ScheduleController.getDay)
+router.get('/range', ScheduleController.getRange)
 router.get('/unscheduled', ScheduleController.getUnscheduled)
 router.get('/members', ScheduleController.getTeamMembers)
 router.get('/team', ScheduleController.getTeamBoard)

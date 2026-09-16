@@ -319,6 +319,47 @@ export class ScheduleController {
         }
     }
 
+    /** Bloques entre dos fechas, para las vistas de mes y de trimestre.
+     *
+     *  La semana tiene su propia consulta porque además devuelve las
+     *  preferencias de franja; aquí solo hacen falta los bloques, que es lo
+     *  único que esas vistas pintan. El rango se limita a un año para que una
+     *  petición mal formada no intente traerse el histórico entero. */
+    static getRange = async (req: Request, res: Response) => {
+        try {
+            const owner = await resolveCalendarOwner(req, res)
+            if (!owner) return
+
+            const from = new Date(String(req.query.from))
+            const to = new Date(String(req.query.to))
+
+            if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+                return res.status(400).json({ error: 'Fechas no válidas' })
+            }
+            if (to <= from) {
+                return res.status(400).json({ error: 'El fin del rango debe ser posterior al inicio' })
+            }
+            if (to.getTime() - from.getTime() > 366 * 24 * 60 * 60 * 1000) {
+                return res.status(400).json({ error: 'El rango no puede superar un año' })
+            }
+
+            const blocks = await TimeBlock.find({
+                ...inCalendarOf(owner._id),
+                start: { $gte: from, $lt: to }
+            }).populate(BLOCK_POPULATE).sort({ start: 1 })
+
+            res.json({
+                user: { _id: owner._id, name: owner.name, email: owner.email },
+                timezone: owner.timezone || DEFAULT_TIMEZONE,
+                from,
+                to,
+                blocks: await maskPrivateBlocks(blocks, req.user)
+            })
+        } catch (error) {
+            res.status(500).json({ error: 'Hubo un error' })
+        }
+    }
+
     /** "Por programar": el trabajo abierto de esa persona, con cuánto le queda
      *  por reservar en la semana que se está mirando.
      *
