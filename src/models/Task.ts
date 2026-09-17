@@ -64,6 +64,11 @@ export interface ITask extends Document {
     priority: TaskPriority
     estimatedMinutes: number | null
     dueDate: Date | null
+    /** El día en que una piensa hacerlo, sin hora. Es la manera rápida de
+     *  decir "esto lo hago hoy": no reserva un hueco en el calendario —eso
+     *  sigue siendo `TimeBlock`, con su propia hora—, solo separa "para hoy"
+     *  de "para cuando sea" en la lista de pendientes. */
+    plannedDate: Date | null
     checklist: { text: string, done: boolean }[]
     dependencies: Types.ObjectId[]
     parentTask: Types.ObjectId | null
@@ -175,6 +180,10 @@ export const TaskSchema : Schema = new Schema({
         type: Date,
         default: null
     },
+    plannedDate: {
+        type: Date,
+        default: null
+    },
     checklist: [
         {
             text: { type: String, trim: true, required: true },
@@ -218,6 +227,7 @@ export const TaskSchema : Schema = new Schema({
 }, {timestamps: true})
 
 TaskSchema.index({ assignee: 1, status: 1 })
+TaskSchema.index({ assignee: 1, plannedDate: 1 })
 TaskSchema.index({ project: 1 })
 
 // Middleware

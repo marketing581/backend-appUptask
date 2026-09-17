@@ -16,6 +16,7 @@ const EDITABLE_FIELDS = [
     'frequency',
     'estimatedMinutes',
     'dueDate',
+    'plannedDate',
     'checklist',
     'dependencies',
     'parentTask'
@@ -48,6 +49,9 @@ export function applyTaskFields(task: ITask, body: Record<string, unknown>) {
                 break
             case 'dueDate':
                 task.dueDate = value === null || value === '' ? null : new Date(String(value))
+                break
+            case 'plannedDate':
+                task.plannedDate = value === null || value === '' ? null : new Date(String(value))
                 break
             case 'checklist':
                 task.checklist = Array.isArray(value)
