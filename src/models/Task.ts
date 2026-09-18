@@ -41,7 +41,9 @@ export type TaskPriority = typeof taskPriority[keyof typeof taskPriority]
  *  mantener. `null` es "sin definir". */
 export const taskColorTag = {
     ORANGE: 'orange',
-    GREEN: 'green'
+    GREEN: 'green',
+    FUCHSIA: 'fuchsia',
+    CELESTE: 'celeste'
 } as const
 
 export type TaskColorTag = typeof taskColorTag[keyof typeof taskColorTag]

@@ -1,5 +1,5 @@
 import { Types } from 'mongoose'
-import { ITask, TaskStatus, taskStatus, taskPriority, taskFrequency } from '../models/Task'
+import { ITask, TaskStatus, taskStatus, taskPriority, taskFrequency, taskColorTag } from '../models/Task'
 import { isRecurring } from './recurrence'
 
 /** Campos que se pueden editar directamente desde la API.
@@ -40,7 +40,9 @@ export function applyTaskFields(task: ITask, body: Record<string, unknown>) {
                 task[field] = toObjectIdOrNull(value)
                 break
             case 'colorTag':
-                task.colorTag = value === 'orange' || value === 'green' ? value : null
+                task.colorTag = (Object.values(taskColorTag) as string[]).includes(String(value))
+                    ? (value as typeof task.colorTag)
+                    : null
                 break
             case 'collaborators':
             case 'dependencies':

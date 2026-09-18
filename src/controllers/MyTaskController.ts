@@ -20,7 +20,7 @@ const TASK_POPULATE = [
     { path: 'assignee', select: '_id name email' },
     { path: 'collaborators', select: '_id name email' },
     { path: 'review.approver', select: '_id name email' },
-    { path: 'project', select: '_id projectName' },
+    { path: 'project', select: '_id projectName team', populate: { path: 'team', select: '_id name' } },
     { path: 'brand', select: '_id name color' }
 ]
 
