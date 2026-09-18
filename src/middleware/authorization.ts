@@ -75,3 +75,17 @@ export function requireManagerRole(req: Request, res: Response, next: NextFuncti
     }
     next()
 }
+
+/* --------------------------------------------------------------- Informes */
+
+/** Los informes de tiempo son de una sola cuenta, por id exacto —no por
+ *  rol—: ni siquiera otra encargada que se agregue más adelante tendría
+ *  acceso solo por serlo. */
+const REPORTS_OWNER_ID = '6aa94c7d5c6817e6ae2e46d3'
+
+export function requireReportsAccess(req: Request, res: Response, next: NextFunction) {
+    if (!sameId(req.user._id, REPORTS_OWNER_ID)) {
+        return res.status(403).json({ error: 'No tienes acceso a los informes' })
+    }
+    next()
+}
