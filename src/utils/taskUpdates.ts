@@ -9,6 +9,7 @@ const EDITABLE_FIELDS = [
     'name',
     'description',
     'brand',
+    'colorTag',
     'assignee',
     'collaborators',
     'definitionOfDone',
@@ -37,6 +38,9 @@ export function applyTaskFields(task: ITask, body: Record<string, unknown>) {
             case 'assignee':
             case 'parentTask':
                 task[field] = toObjectIdOrNull(value)
+                break
+            case 'colorTag':
+                task.colorTag = value === 'orange' || value === 'green' ? value : null
                 break
             case 'collaborators':
             case 'dependencies':

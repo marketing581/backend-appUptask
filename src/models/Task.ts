@@ -37,11 +37,21 @@ export const taskPriority = {
 
 export type TaskPriority = typeof taskPriority[keyof typeof taskPriority]
 
+/** Marca visual del pendiente: solo un color, sin nombre ni lista que
+ *  mantener. `null` es "sin definir". */
+export const taskColorTag = {
+    ORANGE: 'orange',
+    GREEN: 'green'
+} as const
+
+export type TaskColorTag = typeof taskColorTag[keyof typeof taskColorTag]
+
 export interface ITask extends Document {
     name: string
     description: string
     project: Types.ObjectId | null
     brand: Types.ObjectId | null
+    colorTag: TaskColorTag | null
     status: TaskStatus
     onHold: {
         active: boolean
@@ -104,6 +114,11 @@ export const TaskSchema : Schema = new Schema({
     brand: {
         type: Types.ObjectId,
         ref: 'Brand',
+        default: null
+    },
+    colorTag: {
+        type: String,
+        enum: Object.values(taskColorTag),
         default: null
     },
     status: {
