@@ -24,6 +24,7 @@ export class TaskController {
 
             const task = new Task({
                 name: req.body.name,
+                workspace: req.activeWorkspace,
                 assignee,
                 createdBy: req.user.id,
                 statusHistory: [{
@@ -50,7 +51,7 @@ export class TaskController {
 
     static getProjectTasks = async (req: Request, res: Response) => {
         try {
-            const tasks = await Task.find({project: req.project.id})
+            const tasks = await Task.find({ project: req.project.id, workspace: req.activeWorkspace })
                 .populate('project')
                 .populate(TASK_POPULATE)
             res.json(tasks)
@@ -67,7 +68,7 @@ export class TaskController {
                             .populate({path: 'notes', populate: {path: 'createdBy', select: '_id name email' }})
                             .populate({path: 'dependencies', select: '_id name status'})
 
-            const blocks = await TimeBlock.find({ task: req.task.id }).sort({ start: 1 })
+            const blocks = await TimeBlock.find({ task: req.task.id, workspace: req.activeWorkspace }).sort({ start: 1 })
             res.json({ task, blocks })
         } catch (error) {
             res.status(500).json({error: 'Hubo un error'})

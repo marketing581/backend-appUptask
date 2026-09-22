@@ -16,6 +16,7 @@ export class MemoController {
             const { archived } = req.query
 
             const memos = await Memo.find({
+                workspace: req.activeWorkspace,
                 archived: archived === 'true',
                 $or: [
                     { owner: req.user._id },
@@ -34,6 +35,7 @@ export class MemoController {
     static createMemo = async (req: Request, res: Response) => {
         try {
             const memo = new Memo({
+                workspace: req.activeWorkspace,
                 title: req.body.title,
                 content: req.body.content ?? '',
                 owner: req.user._id,
@@ -52,7 +54,8 @@ export class MemoController {
 
     static getMemoById = async (req: Request, res: Response) => {
         try {
-            const memo = await Memo.findById(req.params.memoId).populate(OWNER_POPULATE)
+            const memo = await Memo.findOne({ _id: req.params.memoId, workspace: req.activeWorkspace })
+                .populate(OWNER_POPULATE)
             if (!memo) return res.status(404).json({ error: 'Nota no encontrada' })
 
             const visible = memo.visibility === memoVisibility.TEAM || sameId(memo.owner, req.user._id)
@@ -69,7 +72,7 @@ export class MemoController {
      *  personales, solo su autora. */
     static updateMemo = async (req: Request, res: Response) => {
         try {
-            const memo = await Memo.findById(req.params.memoId)
+            const memo = await Memo.findOne({ _id: req.params.memoId, workspace: req.activeWorkspace })
             if (!memo) return res.status(404).json({ error: 'Nota no encontrada' })
 
             const isOwner = sameId(memo.owner, req.user._id)
@@ -105,7 +108,7 @@ export class MemoController {
 
     static deleteMemo = async (req: Request, res: Response) => {
         try {
-            const memo = await Memo.findById(req.params.memoId)
+            const memo = await Memo.findOne({ _id: req.params.memoId, workspace: req.activeWorkspace })
             if (!memo) return res.status(404).json({ error: 'Nota no encontrada' })
 
             // Borrar es irreversible: solo su autora, o la encargada.

@@ -51,6 +51,7 @@ export type TaskColorTag = typeof taskColorTag[keyof typeof taskColorTag]
 export interface ITask extends Document {
     name: string
     description: string
+    workspace: Types.ObjectId
     project: Types.ObjectId | null
     brand: Types.ObjectId | null
     colorTag: TaskColorTag | null
@@ -111,6 +112,11 @@ export const TaskSchema : Schema = new Schema({
         type: String,
         trim: true,
         default: ''
+    },
+    workspace: {
+        type: Types.ObjectId,
+        ref: 'Workspace',
+        required: true
     },
     // Opcional: las tareas puntuales existen sin proyecto y pueden
     // convertirse en tarea de proyecto conservando su historial.
@@ -253,7 +259,7 @@ export const TaskSchema : Schema = new Schema({
     ]
 }, {timestamps: true})
 
-TaskSchema.index({ assignee: 1, status: 1 })
+TaskSchema.index({ workspace: 1, assignee: 1, status: 1 })
 TaskSchema.index({ assignee: 1, plannedDate: 1 })
 TaskSchema.index({ project: 1 })
 

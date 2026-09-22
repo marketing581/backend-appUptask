@@ -12,6 +12,7 @@ import scheduleRoutes from './routes/scheduleRoutes'
 import brandRoutes from './routes/brandRoutes'
 import memoRoutes from './routes/memoRoutes'
 import reportRoutes from './routes/reportRoutes'
+import workspaceRoutes from './routes/workspaceRoutes'
 
 dotenv.config()
 connectDB()
@@ -33,5 +34,6 @@ app.use('/api/schedule', scheduleRoutes)
 app.use('/api/brands', brandRoutes)
 app.use('/api/notas', memoRoutes)
 app.use('/api/reports', reportRoutes)
+app.use('/api/workspaces', workspaceRoutes)
 
 export default app

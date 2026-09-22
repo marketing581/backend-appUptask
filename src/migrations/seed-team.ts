@@ -8,6 +8,7 @@
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import User from '../models/User'
+import Workspace from '../models/Workspace'
 import { hashPassword } from '../utils/auth'
 
 dotenv.config()
@@ -32,6 +33,14 @@ const run = async () => {
 
     await mongoose.connect(process.env.DATABASE_URL!)
 
+    // Este script sigue siendo el de siempre para Marketing: el primer
+    // workspace que exista (creado por la migración 003) es el suyo.
+    const workspace = await Workspace.findOne().sort({ createdAt: 1 })
+    if (!workspace) {
+        console.error('No hay ningún workspace todavía. Corre antes: npm run migrate:003')
+        process.exit(1)
+    }
+
     for (const member of TEAM) {
         const existing = await User.findOne({ email: member.email })
 
@@ -48,7 +57,8 @@ const run = async () => {
                 email: member.email,
                 password: await hashPassword(INITIAL_PASSWORD),
                 confirmed: true,
-                role: 'member'
+                role: 'member',
+                workspace: workspace._id
             })
             console.log(`creada       ${member.email} (${member.name})`)
         }

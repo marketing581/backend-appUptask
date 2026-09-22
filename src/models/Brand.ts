@@ -3,12 +3,18 @@ import mongoose, { Schema, Document, Types } from 'mongoose'
 /** Marca o área de trabajo. Agrupa proyectos y tareas operativas: "El Resort"
  *  puede tener varios proyectos y además mantenimiento recurrente. */
 export interface IBrand extends Document {
+    workspace: Types.ObjectId
     name: string
     color: string
     createdBy: Types.ObjectId
 }
 
 const BrandSchema: Schema = new Schema({
+    workspace: {
+        type: Types.ObjectId,
+        ref: 'Workspace',
+        required: true
+    },
     name: {
         type: String,
         required: true,

@@ -29,6 +29,7 @@ export const memoPriority = {
 export type MemoPriority = typeof memoPriority[keyof typeof memoPriority]
 
 export interface IMemo extends Document {
+    workspace: Types.ObjectId
     title: string
     content: string
     owner: Types.ObjectId
@@ -39,6 +40,11 @@ export interface IMemo extends Document {
 }
 
 const MemoSchema: Schema = new Schema({
+    workspace: {
+        type: Types.ObjectId,
+        ref: 'Workspace',
+        required: true
+    },
     title: {
         type: String,
         trim: true,
@@ -75,8 +81,8 @@ const MemoSchema: Schema = new Schema({
     }
 }, { timestamps: true })
 
-MemoSchema.index({ owner: 1, archived: 1 })
-MemoSchema.index({ visibility: 1, archived: 1 })
+MemoSchema.index({ workspace: 1, owner: 1, archived: 1 })
+MemoSchema.index({ workspace: 1, visibility: 1, archived: 1 })
 
 const Memo = mongoose.model<IMemo>('Memo', MemoSchema)
 export default Memo

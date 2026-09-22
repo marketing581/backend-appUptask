@@ -12,7 +12,10 @@
     "migrate": "ts-node src/migrations/001-work-model.ts",
     "migrate:dry": "ts-node src/migrations/001-work-model.ts --dry-run",
     "migrate:002": "ts-node src/migrations/002-recurring-reopen.ts",
+    "migrate:003": "ts-node src/migrations/003-workspaces.ts",
+    "migrate:003:dry": "ts-node src/migrations/003-workspaces.ts --dry-run",
     "seed:team": "ts-node src/migrations/seed-team.ts",
+    "seed:dev-team": "ts-node src/migrations/seed-dev-team.ts",
     "seed:maintenance": "ts-node src/migrations/seed-maintenance.ts",
     "verify": "ts-node src/verify/phase1.ts",
     "verify:permissions": "ts-node src/verify/permissions.ts"

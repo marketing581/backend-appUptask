@@ -1,6 +1,7 @@
 /** Registra todos los modelos en Mongoose al arrancar.
  *  Sin esto, poblar una referencia a un modelo que ningún módulo importó
  *  todavía falla con MissingSchemaError. */
+export { default as Workspace } from './Workspace'
 export { default as User } from './User'
 export { default as Token } from './Token'
 export { default as Brand } from './Brand'

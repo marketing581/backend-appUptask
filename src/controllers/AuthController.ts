@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import User from '../models/User';
+import Workspace from '../models/Workspace';
 import Token from '../models/Token';
 import { checkPassword, hashPassword } from '../utils/auth';
 import { generateToken } from '../utils/token';
@@ -19,8 +20,19 @@ export class AuthController {
                 return res.status(409).json({ error: error.message })
             }
 
+            // El alta libre no elige equipo todavía —no hay invitación por
+            // workspace en esta fase—, así que cae en el primero que existe.
+            // En la práctica esto no se usa: las cuentas del equipo se dan
+            // de alta ya confirmadas (`npm run seed:team`), porque el envío
+            // de correo de confirmación está caído.
+            const defaultWorkspace = await Workspace.findOne().sort({ createdAt: 1 })
+            if (!defaultWorkspace) {
+                return res.status(500).json({ error: 'No hay ningún equipo configurado todavía' })
+            }
+
             // Crea un usuario
             const user = new User(req.body)
+            user.workspace = defaultWorkspace._id
 
             // Hash Password
             user.password = await hashPassword(password)

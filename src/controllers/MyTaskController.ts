@@ -68,7 +68,7 @@ export class MyTaskController {
                 ? { updatedAt: -1 }
                 : { dueDate: 1, createdAt: -1 }
 
-            const query = Task.find({ ...filter, ...visibleTaskFilter(req.user) })
+            const query = Task.find({ ...filter, ...visibleTaskFilter(req.user, req.activeWorkspace) })
                 .populate(TASK_POPULATE)
                 .sort(sort)
 
@@ -88,7 +88,7 @@ export class MyTaskController {
             }))
 
             if (Number.isFinite(max) && max > 0) {
-                const total = await Task.countDocuments({ ...filter, ...visibleTaskFilter(req.user) })
+                const total = await Task.countDocuments({ ...filter, ...visibleTaskFilter(req.user, req.activeWorkspace) })
                 res.setHeader('X-Total-Count', String(total))
             }
 
@@ -112,7 +112,10 @@ export class MyTaskController {
                 return res.status(400).json({ error: 'Rango de fechas no válido' })
             }
 
-            const filter: Record<string, unknown> = { status: taskStatus.DONE, ...visibleTaskFilter(req.user) }
+            const filter: Record<string, unknown> = {
+                status: taskStatus.DONE,
+                ...visibleTaskFilter(req.user, req.activeWorkspace)
+            }
             if (assignee && assignee !== 'all') filter.assignee = new Types.ObjectId(assignee.toString())
 
             const tasks = await Task.find(filter)
@@ -156,6 +159,7 @@ export class MyTaskController {
 
             const task = new Task({
                 name: req.body.name,
+                workspace: req.activeWorkspace,
                 assignee,
                 createdBy: req.user.id,
                 statusHistory: [{
@@ -181,7 +185,7 @@ export class MyTaskController {
 
             // Una tarea puntual puede nacer ya dentro de un proyecto.
             if (req.body.project) {
-                const project = await Project.findById(req.body.project)
+                const project = await Project.findOne({ _id: req.body.project, workspace: req.activeWorkspace })
                 if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
                 task.project = project._id
                 project.tasks.push(task._id)
@@ -199,7 +203,7 @@ export class MyTaskController {
 
     static getTaskById = async (req: Request, res: Response) => {
         try {
-            const task = await Task.findById(req.params.taskId)
+            const task = await Task.findOne({ _id: req.params.taskId, workspace: req.activeWorkspace })
                 .populate(TASK_POPULATE)
                 .populate({ path: 'statusHistory.changedBy', select: '_id name email' })
                 .populate({ path: 'notes', populate: { path: 'createdBy', select: '_id name email' } })
@@ -210,7 +214,7 @@ export class MyTaskController {
                 return res.status(403).json({ error: 'No tienes acceso a esta tarea' })
             }
 
-            const blocks = await TimeBlock.find({ task: task._id }).sort({ start: 1 })
+            const blocks = await TimeBlock.find({ task: task._id, workspace: req.activeWorkspace }).sort({ start: 1 })
             res.json({ task, blocks })
         } catch (error) {
             res.status(500).json({ error: 'Hubo un error' })
@@ -219,7 +223,7 @@ export class MyTaskController {
 
     static updateTask = async (req: Request, res: Response) => {
         try {
-            const task = await Task.findById(req.params.taskId)
+            const task = await Task.findOne({ _id: req.params.taskId, workspace: req.activeWorkspace })
             if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
             if (!await canEditTask(req.user, task)) {
                 return res.status(403).json({ error: 'No puedes modificar esta tarea' })
@@ -251,6 +255,7 @@ export class MyTaskController {
                 if (req.body.isPrivate) {
                     const shared = await TimeBlock.exists({
                         task: task._id,
+                        workspace: req.activeWorkspace,
                         guests: { $exists: true, $ne: [] }
                     })
                     if (shared) {
@@ -274,7 +279,7 @@ export class MyTaskController {
 
     static updateStatus = async (req: Request, res: Response) => {
         try {
-            const task = await Task.findById(req.params.taskId)
+            const task = await Task.findOne({ _id: req.params.taskId, workspace: req.activeWorkspace })
             if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
             if (!await canEditTask(req.user, task)) {
                 return res.status(403).json({ error: 'No puedes modificar esta tarea' })
@@ -296,7 +301,7 @@ export class MyTaskController {
      *  esperando aprobación. No la cierra. */
     static requestReview = async (req: Request, res: Response) => {
         try {
-            const task = await Task.findById(req.params.taskId)
+            const task = await Task.findOne({ _id: req.params.taskId, workspace: req.activeWorkspace })
             if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
             if (!await canEditTask(req.user, task)) {
                 return res.status(403).json({ error: 'No puedes modificar esta tarea' })
@@ -331,7 +336,7 @@ export class MyTaskController {
     /** Aprobar cierra la tarea; rechazar la devuelve a ejecución. */
     static resolveReview = async (req: Request, res: Response) => {
         try {
-            const task = await Task.findById(req.params.taskId)
+            const task = await Task.findOne({ _id: req.params.taskId, workspace: req.activeWorkspace })
             if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
             if (!task.review.needed) {
                 return res.status(400).json({ error: 'Esta tarea no está en revisión' })
@@ -378,7 +383,7 @@ export class MyTaskController {
      *  historial, sus bloques y su tiempo registrado. */
     static convertToProjectTask = async (req: Request, res: Response) => {
         try {
-            const task = await Task.findById(req.params.taskId)
+            const task = await Task.findOne({ _id: req.params.taskId, workspace: req.activeWorkspace })
             if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
             if (!await canEditTask(req.user, task)) {
                 return res.status(403).json({ error: 'No puedes modificar esta tarea' })
@@ -387,7 +392,7 @@ export class MyTaskController {
                 return res.status(400).json({ error: 'La tarea ya pertenece a un proyecto' })
             }
 
-            const project = await Project.findById(req.body.project)
+            const project = await Project.findOne({ _id: req.body.project, workspace: req.activeWorkspace })
             if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
             task.project = project._id
@@ -410,7 +415,7 @@ export class MyTaskController {
 
     static deleteTask = async (req: Request, res: Response) => {
         try {
-            const task = await Task.findById(req.params.taskId)
+            const task = await Task.findOne({ _id: req.params.taskId, workspace: req.activeWorkspace })
             if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
             if (!await canEditTask(req.user, task)) {
                 return res.status(403).json({ error: 'No puedes eliminar esta tarea' })

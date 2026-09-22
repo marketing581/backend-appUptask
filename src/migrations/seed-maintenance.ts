@@ -81,7 +81,8 @@ const run = async () => {
             brand = await Brand.create({
                 name: seed.area,
                 color: seed.color,
-                createdBy: manager._id
+                createdBy: manager._id,
+                workspace: manager.workspace
             })
             console.log(`área creada: ${seed.area}`)
         }
@@ -99,6 +100,7 @@ const run = async () => {
             } else {
                 await Task.create({
                     name: item.name,
+                    workspace: manager.workspace,
                     assignee: owner._id,
                     createdBy: manager._id,
                     brand: brand._id,

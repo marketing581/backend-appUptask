@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from "mongoose"
+import mongoose, { Schema, Document, Types } from "mongoose"
 
 export const userRole = {
     MANAGER: 'manager',
@@ -21,6 +21,13 @@ export interface IUser extends Document {
     role: UserRole
     timezone: string
     schedulePrefs: ISchedulePrefs
+    /** El equipo/área al que pertenece la cuenta. Determina qué ve: nada de
+     *  otro workspace es visible, aunque se conozca el id exacto. */
+    workspace: Types.ObjectId
+    /** Administra todos los workspaces (crea equipos, cambia de uno a otro).
+     *  Distinto de `role`: ese sigue siendo el permiso operativo dentro de
+     *  su propio workspace. */
+    isSuperAdmin: boolean
 }
 
 const userSchema: Schema = new Schema({
@@ -55,6 +62,15 @@ const userSchema: Schema = new Schema({
         dayStartHour: { type: Number, default: 8, min: 0, max: 23 },
         dayEndHour: { type: Number, default: 18, min: 1, max: 24 },
         showWeekends: { type: Boolean, default: false }
+    },
+    workspace: {
+        type: Types.ObjectId,
+        ref: 'Workspace',
+        required: true
+    },
+    isSuperAdmin: {
+        type: Boolean,
+        default: false
     }
 })
 

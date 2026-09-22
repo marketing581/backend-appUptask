@@ -26,7 +26,7 @@ export class PreferencesController {
 
             const user = targetId === req.user.id.toString()
                 ? req.user
-                : await User.findById(targetId)
+                : await User.findOne({ _id: targetId, workspace: req.activeWorkspace })
 
             if (!user) return res.status(404).json({ error: 'Usuaria no encontrada' })
 

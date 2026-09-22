@@ -7,7 +7,7 @@ export class TeamMemberController {
         const { email } = req.body
 
         // Find user
-        const user = await User.findOne({email}).select('id email name')
+        const user = await User.findOne({ email, workspace: req.activeWorkspace }).select('id email name')
         if(!user) {
             const error = new Error('Usuario No Encontrado')
             return res.status(404).json({error: error.message})
@@ -27,7 +27,7 @@ export class TeamMemberController {
         const { id } = req.body
 
         // Find user
-        const user = await User.findById(id).select('id')
+        const user = await User.findOne({ _id: id, workspace: req.activeWorkspace }).select('id')
         if(!user) {
             const error = new Error('Usuario No Encontrado')
             return res.status(404).json({error: error.message})

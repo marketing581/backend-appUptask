@@ -14,6 +14,7 @@ import mongoose, { Schema, Document, Types } from 'mongoose'
  *
  *  Los instantes se guardan en UTC; cada usuaria los ve en su zona horaria. */
 export interface ITimeBlock extends Document {
+    workspace: Types.ObjectId
     task: Types.ObjectId
     user: Types.ObjectId
     start: Date
@@ -24,6 +25,11 @@ export interface ITimeBlock extends Document {
 }
 
 const TimeBlockSchema: Schema = new Schema({
+    workspace: {
+        type: Types.ObjectId,
+        ref: 'Workspace',
+        required: true
+    },
     task: {
         type: Types.ObjectId,
         ref: 'Task',

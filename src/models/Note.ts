@@ -1,12 +1,18 @@
 import mongoose, { Schema, Document, Types } from 'mongoose'
 
 export interface INote extends Document {
+    workspace: Types.ObjectId
     content: string
     createdBy: Types.ObjectId
     task: Types.ObjectId
 }
 
 const NoteSchema: Schema = new Schema({
+    workspace: {
+        type: Types.ObjectId,
+        ref: 'Workspace',
+        required: true
+    },
     content: {
         type: String,
         required: true

@@ -51,8 +51,10 @@ export const canViewTask = async (user: IUser, task: ITask): Promise<boolean> =>
 }
 
 /** Condición de Mongo equivalente a `canViewTask`, para filtrar listados sin
- *  traerse todo a memoria. */
-export const visibleTaskFilter = (user: IUser): Record<string, unknown> => ({
+ *  traerse todo a memoria. Siempre acotada al workspace activo: sin esto,
+ *  el `$or` de visibilidad por sí solo dejaría ver tareas de otro equipo. */
+export const visibleTaskFilter = (user: IUser, workspaceId: Types.ObjectId): Record<string, unknown> => ({
+    workspace: workspaceId,
     $or: [
         { isPrivate: { $ne: true } },
         { assignee: user._id },
@@ -76,15 +78,24 @@ export function requireManagerRole(req: Request, res: Response, next: NextFuncti
     next()
 }
 
+/* ------------------------------------------------------------- Workspaces */
+
+/** Crear equipos y moverse entre ellos: solo la cuenta administradora. */
+export function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+    if (!req.user.isSuperAdmin) {
+        return res.status(403).json({ error: 'No tienes acceso a esta acción' })
+    }
+    next()
+}
+
 /* --------------------------------------------------------------- Informes */
 
-/** Los informes de tiempo son de una sola cuenta, por id exacto —no por
- *  rol—: ni siquiera otra encargada que se agregue más adelante tendría
- *  acceso solo por serlo. */
-const REPORTS_OWNER_ID = '6aa94c7d5c6817e6ae2e46d3'
-
+/** Los informes de tiempo son de una sola cuenta —no de un rol—: ni
+ *  siquiera otra encargada que se agregue más adelante tendría acceso solo
+ *  por serlo. Antes era un id harcodeado; ahora es la misma cuenta marcada
+ *  `isSuperAdmin`, sin duplicar el id en dos sitios del código. */
 export function requireReportsAccess(req: Request, res: Response, next: NextFunction) {
-    if (!sameId(req.user._id, REPORTS_OWNER_ID)) {
+    if (!req.user.isSuperAdmin) {
         return res.status(403).json({ error: 'No tienes acceso a los informes' })
     }
     next()

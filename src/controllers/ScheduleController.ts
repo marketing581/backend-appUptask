@@ -36,8 +36,10 @@ const BLOCK_POPULATE = [
     { path: 'guests', select: '_id name email' }
 ]
 
-/** Un bloque está en el calendario de alguien si es suyo o si se la etiquetó. */
-const inCalendarOf = (userId: Types.ObjectId) => ({
+/** Un bloque está en el calendario de alguien si es suyo o si se la
+ *  etiquetó —siempre dentro del mismo workspace, nunca del de otro equipo. */
+const inCalendarOf = (userId: Types.ObjectId, workspaceId: Types.ObjectId) => ({
+    workspace: workspaceId,
     $or: [{ user: userId }, { guests: userId }]
 })
 
@@ -60,7 +62,8 @@ async function resolveCalendarOwner(req: Request, res: Response, mode: 'view' | 
 
     const owner = requestedId === req.user.id.toString()
         ? req.user
-        : await User.findById(requestedId).select('_id name email timezone schedulePrefs role')
+        : await User.findOne({ _id: requestedId, workspace: req.activeWorkspace })
+            .select('_id name email timezone schedulePrefs role')
 
     if (!owner) {
         res.status(404).json({ error: 'Usuaria no encontrada' })
@@ -75,10 +78,12 @@ async function resolveCalendarOwner(req: Request, res: Response, mode: 'view' | 
  *  La ventana es la semana que se está mirando, no el histórico: el trabajo
  *  operativo se repite, y "Historias" vuelve a hacer falta cada día aunque ya
  *  se programara la semana pasada. */
-async function scheduledMinutesByTask(taskIds: Types.ObjectId[], from?: Date, to?: Date) {
+async function scheduledMinutesByTask(
+    taskIds: Types.ObjectId[], workspaceId: Types.ObjectId, from?: Date, to?: Date
+) {
     if (taskIds.length === 0) return new Map<string, number>()
 
-    const match: Record<string, unknown> = { task: { $in: taskIds } }
+    const match: Record<string, unknown> = { task: { $in: taskIds }, workspace: workspaceId }
     if (from && to) match.start = { $gte: from, $lt: to }
 
     const rows = await TimeBlock.aggregate([
@@ -96,12 +101,13 @@ async function scheduledMinutesByTask(taskIds: Types.ObjectId[], from?: Date, to
 
 /** Días distintos de la semana en que ya hay hueco reservado para cada tarea. */
 async function scheduledDaysByTask(
-    taskIds: Types.ObjectId[], from: Date, to: Date, timezone: string
+    taskIds: Types.ObjectId[], workspaceId: Types.ObjectId, from: Date, to: Date, timezone: string
 ) {
     if (taskIds.length === 0) return new Map<string, Set<string>>()
 
     const blocks = await TimeBlock.find({
         task: { $in: taskIds },
+        workspace: workspaceId,
         start: { $gte: from, $lt: to }
     }).select('task start')
 
@@ -114,9 +120,11 @@ async function scheduledDaysByTask(
     return map
 }
 
-async function findConflicts(userId: Types.ObjectId, start: Date, end: Date, excludeId?: string) {
+async function findConflicts(
+    userId: Types.ObjectId, workspaceId: Types.ObjectId, start: Date, end: Date, excludeId?: string
+) {
     const filter: Record<string, unknown> = {
-        ...inCalendarOf(userId),
+        ...inCalendarOf(userId, workspaceId),
         start: { $lt: end },
         end: { $gt: start }
     }
@@ -131,11 +139,11 @@ async function findConflicts(userId: Types.ObjectId, start: Date, end: Date, exc
  *  algo ahí. No se impide —a veces se quiere solapar a propósito—, pero se
  *  avisa antes de guardar, no después. */
 async function findGuestConflicts(
-    guests: Types.ObjectId[], start: Date, end: Date, excludeId?: string
+    guests: Types.ObjectId[], workspaceId: Types.ObjectId, start: Date, end: Date, excludeId?: string
 ) {
     const rows = await Promise.all(guests.map(async guestId => {
-        const blocks = await findConflicts(guestId, start, end, excludeId)
-        const user = await User.findById(guestId).select('_id name')
+        const blocks = await findConflicts(guestId, workspaceId, start, end, excludeId)
+        const user = await User.findOne({ _id: guestId, workspace: workspaceId }).select('_id name')
         return { user: { _id: guestId, name: user?.name ?? '' }, count: blocks.length }
     }))
     return rows.filter(row => row.count > 0)
@@ -147,7 +155,7 @@ async function findGuestConflicts(
  *  a alguien a algo marcado como «Solo tú lo ves». Y nadie puede figurar como
  *  invitada en su propio calendario. */
 async function resolveGuests(
-    raw: unknown, ownerId: Types.ObjectId, task: { isPrivate?: boolean }
+    raw: unknown, ownerId: Types.ObjectId, task: { isPrivate?: boolean }, workspaceId: Types.ObjectId
 ): Promise<{ error: string } | { guests: Types.ObjectId[] }> {
     if (!Array.isArray(raw)) return { guests: [] }
 
@@ -161,7 +169,7 @@ async function resolveGuests(
         return { error: 'Un pendiente reservado no se puede compartir. Quítale «Solo tú lo ves» primero.' }
     }
 
-    const users = await User.find({ _id: { $in: ids }, confirmed: true }).select('_id')
+    const users = await User.find({ _id: { $in: ids }, confirmed: true, workspace: workspaceId }).select('_id')
     if (users.length !== ids.length) {
         return { error: 'Alguna de las personas etiquetadas no existe o no tiene la cuenta activa' }
     }
@@ -232,7 +240,7 @@ export class ScheduleController {
             const weekEnd = addDays(weekStart, 7)
 
             const blocks = await TimeBlock.find({
-                ...inCalendarOf(owner._id),
+                ...inCalendarOf(owner._id, req.activeWorkspace),
                 start: { $gte: weekStart, $lt: weekEnd }
             }).populate(BLOCK_POPULATE).sort({ start: 1 })
 
@@ -268,7 +276,7 @@ export class ScheduleController {
 
             const [blocks, dueToday, overdue] = await Promise.all([
                 TimeBlock.find({
-                    ...inCalendarOf(owner._id),
+                    ...inCalendarOf(owner._id, req.activeWorkspace),
                     start: { $gte: dayStart, $lt: dayEnd }
                 }).populate(BLOCK_POPULATE).sort({ start: 1 }),
 
@@ -276,7 +284,7 @@ export class ScheduleController {
                     assignee: owner._id,
                     status: { $ne: taskStatus.DONE },
                     dueDate: { $gte: dayStart, $lt: dayEnd },
-                    ...visibleTaskFilter(req.user)
+                    ...visibleTaskFilter(req.user, req.activeWorkspace)
                 }).populate([
                     { path: 'project', select: '_id projectName' },
                     { path: 'brand', select: '_id name color' }
@@ -286,7 +294,7 @@ export class ScheduleController {
                     assignee: owner._id,
                     status: { $ne: taskStatus.DONE },
                     dueDate: { $ne: null, $lt: dayStart },
-                    ...visibleTaskFilter(req.user)
+                    ...visibleTaskFilter(req.user, req.activeWorkspace)
                 }).populate([
                     { path: 'project', select: '_id projectName' },
                     { path: 'brand', select: '_id name color' }
@@ -344,7 +352,7 @@ export class ScheduleController {
             }
 
             const blocks = await TimeBlock.find({
-                ...inCalendarOf(owner._id),
+                ...inCalendarOf(owner._id, req.activeWorkspace),
                 start: { $gte: from, $lt: to }
             }).populate(BLOCK_POPULATE).sort({ start: 1 })
 
@@ -382,15 +390,15 @@ export class ScheduleController {
             const tasks = await Task.find({
                 assignee: owner._id,
                 status: { $ne: taskStatus.DONE },
-                ...visibleTaskFilter(req.user)
+                ...visibleTaskFilter(req.user, req.activeWorkspace)
             }).populate([
                 { path: 'project', select: '_id projectName' },
                 { path: 'brand', select: '_id name color' }
             ]).sort({ dueDate: 1, priority: -1 })
 
             const [scheduled, daysByTask] = await Promise.all([
-                scheduledMinutesByTask(tasks.map(task => task._id), weekStart, weekEnd),
-                scheduledDaysByTask(tasks.map(task => task._id), weekStart, weekEnd, timezone)
+                scheduledMinutesByTask(tasks.map(task => task._id), req.activeWorkspace, weekStart, weekEnd),
+                scheduledDaysByTask(tasks.map(task => task._id), req.activeWorkspace, weekStart, weekEnd, timezone)
             ])
 
             const prefs = owner.schedulePrefs ?? { dayStartHour: 8, dayEndHour: 18, showWeekends: false }
@@ -434,16 +442,17 @@ export class ScheduleController {
             const range = validateRange(req.body.start, req.body.end)
             if ('error' in range) return res.status(400).json({ error: range.error })
 
-            const task = await Task.findById(req.body.task)
+            const task = await Task.findOne({ _id: req.body.task, workspace: req.activeWorkspace })
             if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
             if (!await canViewTask(req.user, task)) {
                 return res.status(403).json({ error: 'No tienes acceso a esta tarea' })
             }
 
-            const invited = await resolveGuests(req.body.guests, owner._id, task)
+            const invited = await resolveGuests(req.body.guests, owner._id, task, req.activeWorkspace)
             if ('error' in invited) return res.status(400).json({ error: invited.error })
 
             const block = new TimeBlock({
+                workspace: req.activeWorkspace,
                 task: task._id,
                 user: owner._id,
                 start: range.start,
@@ -455,8 +464,8 @@ export class ScheduleController {
 
             // Los cruces se avisan, no se reprograman en silencio.
             const [conflicts, guestConflicts] = await Promise.all([
-                findConflicts(owner._id, range.start, range.end),
-                findGuestConflicts(invited.guests, range.start, range.end)
+                findConflicts(owner._id, req.activeWorkspace, range.start, range.end),
+                findGuestConflicts(invited.guests, req.activeWorkspace, range.start, range.end)
             ])
 
             await block.save()
@@ -471,7 +480,7 @@ export class ScheduleController {
     /** Mover o redimensionar un bloque. No cambia el estado de la tarea. */
     static updateBlock = async (req: Request, res: Response) => {
         try {
-            const block = await TimeBlock.findById(req.params.blockId)
+            const block = await TimeBlock.findOne({ _id: req.params.blockId, workspace: req.activeWorkspace })
             if (!block) return res.status(404).json({ error: 'Bloque no encontrado' })
             if (!canEditCalendarOf(req.user, block.user)) {
                 return res.status(403).json({ error: 'Solo la encargada puede mover bloques de otra persona' })
@@ -488,15 +497,15 @@ export class ScheduleController {
             if ('note' in req.body) block.note = String(req.body.note ?? '')
 
             if ('guests' in req.body) {
-                const task = await Task.findById(block.task).select('isPrivate')
-                const invited = await resolveGuests(req.body.guests, block.user, task ?? {})
+                const task = await Task.findOne({ _id: block.task, workspace: req.activeWorkspace }).select('isPrivate')
+                const invited = await resolveGuests(req.body.guests, block.user, task ?? {}, req.activeWorkspace)
                 if ('error' in invited) return res.status(400).json({ error: invited.error })
                 block.guests = invited.guests
             }
 
             const [conflicts, guestConflicts] = await Promise.all([
-                findConflicts(block.user, range.start, range.end, block.id),
-                findGuestConflicts(block.guests, range.start, range.end, block.id)
+                findConflicts(block.user, req.activeWorkspace, range.start, range.end, block.id),
+                findGuestConflicts(block.guests, req.activeWorkspace, range.start, range.end, block.id)
             ])
 
             await block.save()
@@ -515,7 +524,7 @@ export class ScheduleController {
      *  convertiría cada etiqueta en algo de lo que no se puede salir. */
     static leaveBlock = async (req: Request, res: Response) => {
         try {
-            const block = await TimeBlock.findById(req.params.blockId)
+            const block = await TimeBlock.findOne({ _id: req.params.blockId, workspace: req.activeWorkspace })
             if (!block) return res.status(404).json({ error: 'Bloque no encontrado' })
 
             const isGuest = block.guests.some(guest => guest.toString() === req.user.id.toString())
@@ -535,7 +544,7 @@ export class ScheduleController {
 
     static deleteBlock = async (req: Request, res: Response) => {
         try {
-            const block = await TimeBlock.findById(req.params.blockId)
+            const block = await TimeBlock.findOne({ _id: req.params.blockId, workspace: req.activeWorkspace })
             if (!block) return res.status(404).json({ error: 'Bloque no encontrado' })
             if (!canEditCalendarOf(req.user, block.user)) {
                 return res.status(403).json({ error: 'Solo la encargada puede quitar bloques de otra persona' })
@@ -562,7 +571,7 @@ export class ScheduleController {
                 return res.status(400).json({ error: 'Fecha no válida' })
             }
 
-            const members = await User.find({ confirmed: true })
+            const members = await User.find({ confirmed: true, workspace: req.activeWorkspace })
                 .select('_id name email role timezone')
                 .sort({ role: 1, name: 1 })
 
@@ -575,7 +584,7 @@ export class ScheduleController {
                     Task.find({
                         assignee: member._id,
                         status: { $ne: taskStatus.DONE },
-                        ...visibleTaskFilter(req.user)
+                        ...visibleTaskFilter(req.user, req.activeWorkspace)
                     })
                         .populate([
                             { path: 'project', select: '_id projectName' },
@@ -586,6 +595,7 @@ export class ScheduleController {
 
                     TimeBlock.find({
                         user: member._id,
+                        workspace: req.activeWorkspace,
                         start: { $gte: dayStart, $lt: dayEnd }
                     })
                 ])
@@ -620,7 +630,7 @@ export class ScheduleController {
     /** Integrantes a las que se puede asignar trabajo o consultar calendario. */
     static getTeamMembers = async (req: Request, res: Response) => {
         try {
-            const users = await User.find({ confirmed: true })
+            const users = await User.find({ confirmed: true, workspace: req.activeWorkspace })
                 .select('_id name email role')
                 .sort({ role: 1, name: 1 })
 

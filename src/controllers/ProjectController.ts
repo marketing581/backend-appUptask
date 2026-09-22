@@ -10,6 +10,7 @@ export class ProjectController {
      *  él. */
     static createProject = async (req: Request, res: Response) => {
         const project = new Project(req.body)
+        project.workspace = req.activeWorkspace
         project.manager = req.user.id
         try {
             await project.save()
@@ -29,10 +30,15 @@ export class ProjectController {
      *  así que no hace falta filtrar por quién lo creó. */
     static getAllProjects = async (req: Request, res: Response) => {
         try {
-            const projects = await Project.find({}).lean()
+            const projects = await Project.find({ workspace: req.activeWorkspace }).lean()
 
             const rows = await Task.aggregate([
-                { $match: { project: { $in: projects.map(project => project._id) } } },
+                {
+                    $match: {
+                        workspace: req.activeWorkspace,
+                        project: { $in: projects.map(project => project._id) }
+                    }
+                },
                 {
                     $group: {
                         _id: { project: '$project', status: '$status', review: '$review.needed' },
@@ -71,7 +77,7 @@ export class ProjectController {
     static getProjectById = async (req: Request, res: Response) => {
         const { id } = req.params
         try {
-            const project = await Project.findById(id).populate({
+            const project = await Project.findOne({ _id: id, workspace: req.activeWorkspace }).populate({
                 path: 'tasks',
                 populate: { path: 'assignee', select: '_id name email' }
             })

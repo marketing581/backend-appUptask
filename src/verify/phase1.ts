@@ -7,6 +7,7 @@
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import User from '../models/User'
+import Workspace from '../models/Workspace'
 import { hashPassword } from '../utils/auth'
 
 dotenv.config()
@@ -71,13 +72,19 @@ const createdProjects: string[] = []
 
 async function run() {
     await mongoose.connect(process.env.DATABASE_URL!)
+    // Cuenta desechable, dentro del workspace de Marketing (el primero que
+    // exista): esta suite verifica flujos del equipo real, no multi-equipo.
+    const workspace = await Workspace.findOne().sort({ createdAt: 1 })
+    if (!workspace) throw new Error('No hay ningún workspace todavía. Corre antes: npm run migrate:003')
+
     await User.deleteOne({ email: TEST_USER.email })
     await User.create({
         name: TEST_USER.name,
         email: TEST_USER.email,
         password: await hashPassword(TEST_USER.password),
         confirmed: true,
-        role: 'member'
+        role: 'member',
+        workspace: workspace._id
     })
 
     section('Login')

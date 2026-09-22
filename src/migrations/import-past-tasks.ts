@@ -148,6 +148,7 @@ async function main() {
         await Task.create({
             name,
             description: comment,
+            workspace: owner.workspace,
             assignee: owner._id,
             createdBy: owner._id,
             project: null,

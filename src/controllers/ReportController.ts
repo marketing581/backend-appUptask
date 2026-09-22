@@ -3,6 +3,7 @@ import Task, { taskStatus } from '../models/Task'
 import { businessMinutesBetween } from '../utils/businessHours'
 import { DEFAULT_TIMEZONE, addDays, startOfWeekUtc, utcToZonedParts, zonedTimeToUtc } from '../utils/datetime'
 import { isFromHistoricalImport, lastDoneAt } from '../utils/taskHistory'
+import { visibleTaskFilter } from '../middleware/authorization'
 
 /** Cuánto tarda el equipo de "En proceso" a "Listo", contando solo horario
  *  de oficina. `Task.statusHistory` ya trae la fecha real de cada cambio de
@@ -67,7 +68,10 @@ export class ReportController {
             const timezone = DEFAULT_TIMEZONE
             const { start, end } = periodRange(period, anchor, timezone)
 
-            const filter: Record<string, unknown> = { status: taskStatus.DONE }
+            const filter: Record<string, unknown> = {
+                status: taskStatus.DONE,
+                ...visibleTaskFilter(req.user, req.activeWorkspace)
+            }
             if (personId !== 'all') filter.assignee = personId
 
             const tasks = await Task.find(filter)

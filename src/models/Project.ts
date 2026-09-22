@@ -5,6 +5,7 @@ import Note from './Note'
 import TimeBlock from './TimeBlock'
 
 export interface IProject extends Document {
+    workspace: Types.ObjectId
     projectName: string
     /** Opcionales: la mayoría de proyectos internos no tienen un cliente
      *  externo ni necesitan una descripción para empezar a trabajar. */
@@ -17,6 +18,11 @@ export interface IProject extends Document {
 }
 
 const ProjectSchema: Schema = new Schema({
+    workspace: {
+        type: Types.ObjectId,
+        ref: 'Workspace',
+        required: true
+    },
     projectName: {
         type: String,
         required: true,

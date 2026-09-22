@@ -8,6 +8,7 @@
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import User from '../models/User'
+import Workspace from '../models/Workspace'
 import { hashPassword } from '../utils/auth'
 
 dotenv.config()
@@ -64,6 +65,8 @@ const cleanup: { token: string, path: string }[] = []
 async function run() {
     // La cuenta temporal de encargada se crea directamente en la base.
     await mongoose.connect(process.env.DATABASE_URL!)
+    const workspace = await Workspace.findOne().sort({ createdAt: 1 })
+    if (!workspace) throw new Error('No hay ningún workspace todavía. Corre antes: npm run migrate:003')
 
     section('Acceso de las colaboradoras')
     const nicole = await login('nicole@greendreams.pe', TEAM_PASSWORD)
@@ -181,7 +184,8 @@ async function run() {
         email: TEMP_MANAGER.email,
         password: await hashPassword(TEMP_MANAGER.password),
         confirmed: true,
-        role: 'manager'
+        role: 'manager',
+        workspace: workspace._id
     })
     const boss = await login(TEMP_MANAGER.email, TEMP_MANAGER.password)
     check('la encargada entra', true, boss.length > 20)

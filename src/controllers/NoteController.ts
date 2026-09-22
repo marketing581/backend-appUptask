@@ -1,4 +1,4 @@
-import type { Request, Response } from 'express'
+import type { Request, Response } from 'express'
 import Note, {INote} from '../models/Note'
 import { Types } from 'mongoose'
 
@@ -11,6 +11,7 @@ export class NoteController {
         const { content } = req.body
 
         const note = new Note()
+        note.workspace = req.activeWorkspace
         note.content = content
         note.createdBy = req.user.id
         note.task = req.task.id
@@ -26,7 +27,7 @@ export class NoteController {
 
     static getTaskNotes = async (req: Request, res: Response) => {
         try {
-            const notes = await Note.find({task: req.task.id})
+            const notes = await Note.find({ task: req.task.id, workspace: req.activeWorkspace })
             res.json(notes)
         } catch (error) {
             res.status(500).json({error: 'Hubo un error'})
@@ -34,8 +35,11 @@ export class NoteController {
     }
 
     static deleteNote = async (req: Request<NoteParams>, res: Response) => {
-        const { noteId } = req.params
-        const note = await Note.findById(noteId)
+        const { noteId } = req.params
+        // Por id, tarea y workspace a la vez: sin esto, cualquier id de nota
+        // que existiera en la base —de otra tarea, o de otro equipo— se
+        // podía borrar igual, sin pertenecer a lo que se está mirando.
+        const note = await Note.findOne({ _id: noteId, task: req.task.id, workspace: req.activeWorkspace })
 
         if(!note) {
             const error = new Error('Nota no encontrada')
