@@ -81,6 +81,12 @@ export interface ITask extends Document {
      *  sigue siendo `TimeBlock`, con su propia hora—, solo separa "para hoy"
      *  de "para cuando sea" en la lista de pendientes. */
     plannedDate: Date | null
+    /** Posición manual dentro de su propia lista (Pendientes, un día, Por
+     *  validar): a igual valor, se conserva el orden que ya traía; al
+     *  arrastrar una fila sobre otra, se reescribe para toda la lista
+     *  visible en ese momento. No compite con nada más —una tarea vive en
+     *  una sola lista a la vez—, así que un solo número alcanza. */
+    order: number
     checklist: { text: string, done: boolean }[]
     dependencies: Types.ObjectId[]
     parentTask: Types.ObjectId | null
@@ -200,6 +206,10 @@ export const TaskSchema : Schema = new Schema({
     plannedDate: {
         type: Date,
         default: null
+    },
+    order: {
+        type: Number,
+        default: 0
     },
     checklist: [
         {

@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 import Task, { taskStatus } from '../models/Task'
 import { businessMinutesBetween } from '../utils/businessHours'
 import { DEFAULT_TIMEZONE, addDays, startOfWeekUtc, utcToZonedParts, zonedTimeToUtc } from '../utils/datetime'
+import { isFromHistoricalImport, lastDoneAt } from '../utils/taskHistory'
 
 /** Cuánto tarda el equipo de "En proceso" a "Listo", contando solo horario
  *  de oficina. `Task.statusHistory` ya trae la fecha real de cada cambio de
@@ -49,15 +50,6 @@ function firstInProgressAt(history: StatusHistoryEntry[]): Date | null {
     return entry ? entry.changedAt : null
 }
 
-/** La más reciente vez que llegó a "Listo": si se reabre y se vuelve a
- *  cerrar, esta es la que manda, sin duplicar la fila. */
-function lastDoneAt(history: StatusHistoryEntry[]): Date | null {
-    for (let i = history.length - 1; i >= 0; i--) {
-        if (history[i].to === taskStatus.DONE) return history[i].changedAt
-    }
-    return null
-}
-
 export class ReportController {
     static getTaskDurationReport = async (req: Request, res: Response) => {
         try {
@@ -84,6 +76,7 @@ export class ReportController {
 
             const rows = []
             for (const task of tasks) {
+                if (isFromHistoricalImport(task.statusHistory)) continue
                 const finishedAt = lastDoneAt(task.statusHistory)
                 if (!finishedAt || finishedAt < start || finishedAt >= end) continue
 

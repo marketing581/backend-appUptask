@@ -12,6 +12,9 @@ router.use(authenticate)
 
 router.get('/', MyTaskController.getTasks)
 
+// Antes de '/:taskId': si no, "finished" se leería como un id de tarea.
+router.get('/finished', MyTaskController.getFinished)
+
 router.post('/',
     body('name').notEmpty().withMessage('El nombre de la tarea es obligatorio'),
     handleInputErrors,

@@ -15,6 +15,7 @@ import {
     changeTaskStatus,
     TaskStatusError
 } from '../utils/taskUpdates'
+import { isFromHistoricalImport, lastDoneAt } from '../utils/taskHistory'
 
 const TASK_POPULATE = [
     { path: 'assignee', select: '_id name email' },
@@ -92,6 +93,53 @@ export class MyTaskController {
             }
 
             res.json(payload)
+        } catch (error) {
+            res.status(500).json({ error: 'Hubo un error' })
+        }
+    }
+
+    /** Lo cerrado dentro de un rango de fechas, para la vista "Finalizados":
+     *  por la fecha real del último paso a Listo —tomada del historial de
+     *  estados—, no por cuándo se tocó por última vez el registro. Mismo
+     *  criterio de visibilidad que el resto: el trabajo del equipo se ve
+     *  entre sus integrantes, salvo lo reservado. */
+    static getFinished = async (req: Request, res: Response) => {
+        try {
+            const { assignee, from, to } = req.query
+            const start = from ? new Date(String(from)) : null
+            const end = to ? new Date(String(to)) : null
+            if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+                return res.status(400).json({ error: 'Rango de fechas no válido' })
+            }
+
+            const filter: Record<string, unknown> = { status: taskStatus.DONE, ...visibleTaskFilter(req.user) }
+            if (assignee && assignee !== 'all') filter.assignee = new Types.ObjectId(assignee.toString())
+
+            const tasks = await Task.find(filter)
+                .select('name assignee statusHistory')
+                .populate('assignee', '_id name')
+
+            const rows = []
+            for (const task of tasks) {
+                if (isFromHistoricalImport(task.statusHistory)) continue
+                const finishedAt = lastDoneAt(task.statusHistory)
+                if (!finishedAt || finishedAt < start || finishedAt >= end) continue
+
+                const assigneeDoc = task.assignee && typeof task.assignee !== 'string'
+                    ? task.assignee as unknown as { _id: unknown, name: string }
+                    : null
+
+                rows.push({
+                    taskId: task._id,
+                    taskName: task.name,
+                    assigneeId: assigneeDoc?._id ?? null,
+                    assigneeName: assigneeDoc?.name ?? '—',
+                    finishedAt
+                })
+            }
+
+            rows.sort((a, b) => b.finishedAt.getTime() - a.finishedAt.getTime())
+            res.json({ rows })
         } catch (error) {
             res.status(500).json({ error: 'Hubo un error' })
         }

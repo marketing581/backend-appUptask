@@ -18,6 +18,7 @@ const EDITABLE_FIELDS = [
     'estimatedMinutes',
     'dueDate',
     'plannedDate',
+    'order',
     'checklist',
     'dependencies',
     'parentTask'
@@ -52,6 +53,9 @@ export function applyTaskFields(task: ITask, body: Record<string, unknown>) {
                 break
             case 'estimatedMinutes':
                 task.estimatedMinutes = value === null || value === '' ? null : Number(value)
+                break
+            case 'order':
+                task.order = Number(value) || 0
                 break
             case 'dueDate':
                 task.dueDate = value === null || value === '' ? null : new Date(String(value))
