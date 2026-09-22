@@ -13,6 +13,7 @@ import brandRoutes from './routes/brandRoutes'
 import memoRoutes from './routes/memoRoutes'
 import reportRoutes from './routes/reportRoutes'
 import workspaceRoutes from './routes/workspaceRoutes'
+import importRoutes from './routes/importRoutes'
 
 dotenv.config()
 connectDB()
@@ -23,8 +24,9 @@ app.use(cors(corsConfig))
 // Logging
 app.use(morgan('dev'))
 
-// Leer datos de formularios
-app.use(express.json())
+// Leer datos de formularios. El límite por defecto (100kb) se queda corto
+// para un CSV de Notion con cientos de filas pegado como texto.
+app.use(express.json({ limit: '10mb' }))
 
 // Routes
 app.use('/api/auth', authRoutes)
@@ -35,5 +37,6 @@ app.use('/api/brands', brandRoutes)
 app.use('/api/notas', memoRoutes)
 app.use('/api/reports', reportRoutes)
 app.use('/api/workspaces', workspaceRoutes)
+app.use('/api/imports', importRoutes)
 
 export default app

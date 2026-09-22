@@ -31,7 +31,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 
         if(typeof decoded === 'object' && decoded.id) {
             const user = await User.findById(decoded.id)
-                .select('_id name email role timezone schedulePrefs workspace isSuperAdmin')
+                .select('_id name email role gender timezone schedulePrefs workspace isSuperAdmin')
                 .populate('workspace', '_id name')
             if(user) {
                 req.user = user

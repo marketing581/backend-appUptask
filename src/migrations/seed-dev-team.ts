@@ -8,7 +8,7 @@
  */
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
-import User, { UserRole } from '../models/User'
+import User, { UserGender, UserRole } from '../models/User'
 import Workspace from '../models/Workspace'
 import { hashPassword } from '../utils/auth'
 
@@ -18,10 +18,10 @@ const INITIAL_PASSWORD = process.env.TEAM_SEED_PASSWORD
 
 const WORKSPACE_NAME = 'Equipo de Desarrollo'
 
-const TEAM: { name: string, email: string, role: UserRole }[] = [
-    { name: 'Julio', email: 'desarrollo@greendreams.pe', role: 'manager' },
-    { name: 'Masiel', email: 'masiel@greendreams.pe', role: 'member' },
-    { name: 'Romina', email: 'romina@greendreams.pe', role: 'member' }
+const TEAM: { name: string, email: string, role: UserRole, gender: UserGender }[] = [
+    { name: 'Julio', email: 'desarrollo@greendreams.pe', role: 'manager', gender: 'm' },
+    { name: 'Masiel', email: 'masiel@greendreams.pe', role: 'member', gender: 'f' },
+    { name: 'Romina', email: 'romina@greendreams.pe', role: 'member', gender: 'f' }
 ]
 
 const run = async () => {
@@ -49,6 +49,7 @@ const run = async () => {
             existing.password = await hashPassword(INITIAL_PASSWORD)
             existing.confirmed = true
             existing.role = member.role
+            existing.gender = member.gender
             existing.workspace = workspace._id
             await existing.save()
             console.log(`actualizada  ${member.email} (${member.name}, ${member.role})`)
@@ -59,6 +60,7 @@ const run = async () => {
                 password: await hashPassword(INITIAL_PASSWORD),
                 confirmed: true,
                 role: member.role,
+                gender: member.gender,
                 workspace: workspace._id
             })
             console.log(`creada       ${member.email} (${member.name}, ${member.role})`)

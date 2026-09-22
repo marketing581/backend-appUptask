@@ -572,7 +572,7 @@ export class ScheduleController {
             }
 
             const members = await User.find({ confirmed: true, workspace: req.activeWorkspace })
-                .select('_id name email role timezone')
+                .select('_id name email role gender timezone')
                 .sort({ role: 1, name: 1 })
 
             const panels = await Promise.all(members.map(async member => {
@@ -611,7 +611,8 @@ export class ScheduleController {
                         _id: member._id,
                         name: member.name,
                         email: member.email,
-                        role: member.role
+                        role: member.role,
+                        gender: member.gender
                     },
                     tasks: tasks.map(task => ({
                         ...task.toObject(),
@@ -631,7 +632,7 @@ export class ScheduleController {
     static getTeamMembers = async (req: Request, res: Response) => {
         try {
             const users = await User.find({ confirmed: true, workspace: req.activeWorkspace })
-                .select('_id name email role')
+                .select('_id name email role gender')
                 .sort({ role: 1, name: 1 })
 
             res.json(users)

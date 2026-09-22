@@ -7,6 +7,15 @@ export const userRole = {
 
 export type UserRole = typeof userRole[keyof typeof userRole]
 
+/** Solo para concordancia de género en la interfaz ("Encargada"/"Encargado").
+ *  Nada más depende de esto. */
+export const userGender = {
+    FEMALE: 'f',
+    MALE: 'm'
+} as const
+
+export type UserGender = typeof userGender[keyof typeof userGender]
+
 export interface ISchedulePrefs {
     dayStartHour: number
     dayEndHour: number
@@ -20,6 +29,7 @@ export interface IUser extends Document {
     confirmed: boolean
     role: UserRole
     timezone: string
+    gender: UserGender
     schedulePrefs: ISchedulePrefs
     /** El equipo/área al que pertenece la cuenta. Determina qué ve: nada de
      *  otro workspace es visible, aunque se conozca el id exacto. */
@@ -57,6 +67,11 @@ const userSchema: Schema = new Schema({
     timezone: {
         type: String,
         default: 'America/Lima'
+    },
+    gender: {
+        type: String,
+        enum: Object.values(userGender),
+        default: userGender.FEMALE
     },
     schedulePrefs: {
         dayStartHour: { type: Number, default: 8, min: 0, max: 23 },
